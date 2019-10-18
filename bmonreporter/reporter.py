@@ -25,3 +25,8 @@ def create_reports(
     log_file_path: directory or S3 bucket + prefix to store log files from report
         creation; defaults to 'bmon-report-logs' in current directory.
     """
+
+    print(f'''template: {template_path}
+output: {output_path}
+BMON URLs: {bmon_urls}
+Log File: {log_file_path}''')
