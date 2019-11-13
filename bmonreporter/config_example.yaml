@@ -1,9 +1,9 @@
 # directory or S3 bucket + prefix where notebook report templates 
 # are stored.  Specify an S3 bucket and prefix by:  s3://bucket/prefix-to-templates
-template_path: s3://bmonreporter.analysisnorth.com/templates
+template_path: s3://bmonreporter/templates
 
 # directory or S3 bucket + prefix where created reports are stored.
-output_path: s3://bmonreporter.analysisnorth.com/reports
+output_path: s3://bmonreporter/reports
 
 # a list or iterable containing the base BMON Server URLs that should be 
 # processed for creating reports.  e.g. ['https://bms.ahfc.us', 'https://bmon.analysisnorth.com']
@@ -14,4 +14,7 @@ bmon_urls:
 # directory or S3 bucket + prefix to store log files from report
 # creation; defaults to 'bmon-report-logs' in current directory
 # if this entry is not present.
-# log_file_path: 
+log_file_path: s3://bmonreporter/logs 
+
+# logging level: DEBUG, INFO, WARNING, ERROR
+log_level:  INFO
