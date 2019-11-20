@@ -33,5 +33,6 @@ setuptools.setup(
         'boto3>=1.10.0',
         'papermill>=1.2.0',
         'nteract-scrapbook>=0.3.1',
+        'bmondata>=1.0.2',
     ]
 )
