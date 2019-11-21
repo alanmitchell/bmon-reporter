@@ -38,12 +38,6 @@ def create_reports(
         creation; defaults to 'bmon-report-logs' in current directory.
     """
 
-    print(f'''template: {template_path}
-output: {output_path}
-BMON URLs: {bmon_urls}
-Log Level: {log_level}
-Log File: {log_file_path}''')
-
     # set up logging
     # temporary directory for log files
     log_dir = tempfile.TemporaryDirectory()
@@ -62,8 +56,8 @@ Log File: {log_file_path}''')
         # create a temporary directory for scratch purposes, and make a couple file
         # names inside that directory
         scratch_dir = tempfile.TemporaryDirectory()
-        out_nb_path = Path(scratch_dir) / 'report.ipynb'
-        out_html_path = Path(scratch_dir) / 'report.html'
+        out_nb_path = Path(scratch_dir.name) / 'report.ipynb'
+        out_html_path = Path(scratch_dir.name) / 'report.html'
 
         # Loop through the BMON servers to process
         for server_url in bmon_urls:
@@ -71,7 +65,7 @@ Log File: {log_file_path}''')
                 logging.info(f'Processing started for {server_url}')
 
                 # create a temporary directory to write reports
-                rpt_path = Path(tempfile.TemporaryDirectory())
+                rpt_path = Path(tempfile.TemporaryDirectory().name)
                 
                 # loop through all the buildings of the BMON site, running the building
                 # templates on each.
@@ -82,13 +76,14 @@ Log File: {log_file_path}''')
                     bldg_id = bldg['id']
 
                     # loop through all the building reports and run them on this building.
-                    for rpt_nb_path in (Path(templ_dir) / 'building').glob('*.ipynb'):
+                    for rpt_nb_path in (Path(templ_dir.name) / 'building').glob('*.ipynb'):
 
                         try:
                             pm.execute_notebook(
                                 str(rpt_nb_path),
                                 str(out_nb_path),
-                                parameters = dict(server_web_address=server_url, building_id=bldg_id)
+                                parameters = dict(server_web_address=server_url, building_id=bldg_id),
+                                kernel_name='python3',
                             )
 
                             # get the glued scraps from the notebook
@@ -126,3 +121,10 @@ Log File: {log_file_path}''')
     finally:
         # copy the temporary logging directory to its final location
         copy_dir_tree(log_dir.name, log_file_path)
+
+if __name__ == "__main__":
+    import yaml
+    config_file_path = '/home/tabb99/bmonreporter/bmonreporter/config_example.yaml'
+
+    args = yaml.load(open(config_file_path), Loader=yaml.SafeLoader)
+    create_reports(**args)
