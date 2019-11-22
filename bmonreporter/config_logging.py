@@ -27,10 +27,28 @@ def configure_logging(logging_module, log_file_path, log_level):
     formatter = logging_module.Formatter('%(asctime)s - %(levelname)s - %(module)s - %(message)s')
     fh.setFormatter(formatter)
 
+    # filter out some records
+    filtr = MyFilter()
+    fh.addFilter(filtr)
+
     # create a handler that will print to console as well.
     console_h = logging_module.StreamHandler()
     console_h.setFormatter(formatter)
+    console_h.addFilter(filtr)
 
     # add the handlers to the root logger
     logging_module.root.addHandler(fh)
     logging_module.root.addHandler(console_h)
+
+
+class MyFilter(logging.Filter):
+    """Class to restrict which logging records get logged.
+    """
+
+    def filter(self, record):
+
+        # Don't record the records coming from the papermill execute module
+        if record.module == 'execute':
+            return False
+
+        return True
