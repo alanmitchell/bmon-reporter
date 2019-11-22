@@ -21,6 +21,7 @@ def create_reports(
     template_path,      
     output_path,
     bmon_urls,
+    jup_theme_cmd,
     log_level,
     log_file_path='bmon-reporter-logs/',
     ):
@@ -34,6 +35,9 @@ def create_reports(
     output_path: directory or S3 bucket + prefix where created reports are stored.
     bmon_urls: a list or iterable containing the base BMON Server URLs that should be 
         processed for creating reports.  e.g. ['https://bms.ahfc.us', 'https://bmon.analysisnorth.com']
+    jup_theme_cmd: this is the Jupyter Theme command to run prior to generating reports.  This will
+        set the formatting of the notebooks.  See: https://github.com/dunovank/jupyter-themes
+    log_level: string indicating detail of logging to occur: DEBUG, INFO, WARNING, ERROR
     log_file_path: directory or S3 bucket + prefix to store log files from report
         creation; defaults to 'bmon-report-logs' in current directory.
     """
@@ -48,6 +52,9 @@ def create_reports(
     )
 
     try:
+        # Run the Jupyter Themes command to get correct formatting of the notebook reports.
+        subprocess.run(jup_theme_cmd, shell=True, check=True)
+
         # temporary directory for report templates
         templ_dir = tempfile.TemporaryDirectory()
         # copy the report templates into this directory
@@ -61,8 +68,16 @@ def create_reports(
 
         # Loop through the BMON servers to process
         for server_url in bmon_urls:
+
+            # extract server domain for message labeling purposes
+            server_domain = urlparse(server_url).netloc
+
             try:
-                logging.info(f'Processing started for {server_url}')
+                logging.info(f'Processing started for {server_domain}')
+                
+                # Track number of completed and aborted reports
+                completed_ct = 0
+                aborted_ct = 0
 
                 # create a temporary directory to write reports
                 rpt_dir = tempfile.TemporaryDirectory()
@@ -108,27 +123,34 @@ def create_reports(
                             dest_path = rpt_path / 'building' / str(bldg_id) / dest_name
                             dest_path.parent.mkdir(parents=True, exist_ok=True)
                             out_html_path.replace(dest_path)
+                            completed_ct += 1
 
                         except pm.PapermillExecutionError as err:
+                            aborted_ct += 1
                             if err.ename == 'RuntimeError':
                                 # This error was raised intentionally to stop notebook execution.
                                 # Just log an info message.
-                                logging.info(f'Report aborted for server={server_url}, building={bldg_id}, report={rpt_nb_path.name}: {err.evalue}')
+                                logging.info(f'Report aborted for server={server_domain}, building={bldg_id}, report={rpt_nb_path.name}: {err.evalue}')
                             else:
-                                logging.exception(f'Error processing server={server_url}, building={bldg_id}, report={rpt_nb_path.name}')
+                                logging.exception(f'Error processing server={server_domain}, building={bldg_id}, report={rpt_nb_path.name}')
 
                         except:
-                            logging.exception(f'Error processing server={server_url}, building={bldg_id}, report={rpt_nb_path.name}')
+                            aborted_ct += 1
+                            logging.exception(f'Error processing server={server_domain}, building={bldg_id}, report={rpt_nb_path.name}')
 
                     if bldg_id==2:
                         break
 
             except:
-                logging.exception(f'Error processing server {server_url}')
+                logging.exception(f'Error processing server {server_domain}')
 
             finally:
+
+                # Log the number of completed and aborted reports
+                logging.info(f'For server {server_domain}, {completed_ct} reports completed, {aborted_ct} reports aborted.')
+                
                 # copy the report files to their final location
-                dest_dir = str(Path(output_path) / urlparse(server_url).netloc)
+                dest_dir = str(Path(output_path) / server_domain)
 
                 # If the destination is s3, the Path concatenation above stripped out a /
                 # that needs to be put back in.
@@ -140,14 +162,12 @@ def create_reports(
                     dest_dir
                 )
 
-            break
-
     except:
         logging.exception('Error setting up reporter.')
 
     finally:
         # copy the temporary logging directory to its final location
-        copy_dir_tree(log_dir.name, log_file_path)
+        copy_dir_tree(log_dir.name, log_file_path, 'text/plain; charset=ISO-8859-15')
 
 def test():
     """Run the example configuration file as a test case.
