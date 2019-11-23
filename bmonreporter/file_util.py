@@ -3,7 +3,7 @@ could possibly be an S3 bucket.
 This module requires that the AWS CLI is installed because "aws s3 sync" is used.
 """
 import shutil
-from path import Path
+from pathlib import Path
 import subprocess
 
 def copy_dir_tree(from_dir, to_dir, content_type=None):

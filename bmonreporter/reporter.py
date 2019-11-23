@@ -60,12 +60,6 @@ def create_reports(
         # copy the report templates into this directory
         copy_dir_tree(template_path, templ_dir.name)
 
-        # create a temporary directory for scratch purposes, and make a couple file
-        # names inside that directory
-        scratch_dir = tempfile.TemporaryDirectory()
-        out_nb_path = Path(scratch_dir.name) / 'report.ipynb'
-        out_html_path = Path(scratch_dir.name) / 'report.html'
-
         # Loop through the BMON servers to process
         for server_url in bmon_urls:
 
@@ -75,10 +69,6 @@ def create_reports(
             try:
                 logging.info(f'Processing started for {server_domain}')
                 
-                # Track number of completed and aborted reports
-                completed_ct = 0
-                aborted_ct = 0
-
                 # create a temporary directory to write reports
                 rpt_dir = tempfile.TemporaryDirectory()
                 rpt_path = Path(rpt_dir.name)
@@ -86,68 +76,19 @@ def create_reports(
                 # loop through all the buildings of the BMON site, running the building
                 # templates on each.
                 server = bmondata.Server(server_url)
-                for bldg in server.buildings():
-                    
-                    # get the ID for this building
-                    bldg_id = bldg['id']
-
-                    if bldg_id != 2:
-                        continue
-
-                    # loop through all the building reports and run them on this building.
-                    for rpt_nb_path in (Path(templ_dir.name) / 'building').glob('*.ipynb'):
-
-                        try:
-                            pm.execute_notebook(
-                                str(rpt_nb_path),
-                                str(out_nb_path),
-                                parameters = dict(server_web_address=server_url, building_id=bldg_id),
-                                kernel_name='python3',
-                            )
-                            print('finished nb execution')
-                            # get the glued scraps from the notebook
-                            nb = sb.read_notebook(str(out_nb_path))
-                            scraps = nb.scraps.data_dict
-
-                            if 'hide' in scraps and scraps['hide'] == True:
-                                # report is not available, probably due to lack of data
-                                continue
-
-                            # convert the notebook to html. throw an error if one occurs.
-                            subprocess.run(f'jupyter nbconvert {out_nb_path} --no-input', shell=True, check=True)
-
-                            # move the resulting html report to the report directory
-                            # first create the destination file name and create the necessary
-                            # directories, if they don't exist.
-                            dest_name = Path(rpt_nb_path.name).with_suffix('.html')
-                            dest_path = rpt_path / 'building' / str(bldg_id) / dest_name
-                            dest_path.parent.mkdir(parents=True, exist_ok=True)
-                            out_html_path.replace(dest_path)
-                            completed_ct += 1
-
-                        except pm.PapermillExecutionError as err:
-                            aborted_ct += 1
-                            if err.ename == 'RuntimeError':
-                                # This error was raised intentionally to stop notebook execution.
-                                # Just log an info message.
-                                logging.info(f'Report aborted for server={server_domain}, building={bldg_id}, report={rpt_nb_path.name}: {err.evalue}')
-                            else:
-                                logging.exception(f'Error processing server={server_domain}, building={bldg_id}, report={rpt_nb_path.name}')
-
-                        except:
-                            aborted_ct += 1
-                            logging.exception(f'Error processing server={server_domain}, building={bldg_id}, report={rpt_nb_path.name}')
-
-                    if bldg_id==2:
-                        break
+                bldg_ids = [bldg['id'] for bldg in server.buildings()]
+                run_report_set(
+                    server_url,
+                    'building_id',
+                    bldg_ids,
+                    Path(templ_dir.name) / 'building',
+                    rpt_path / 'building',
+                    )
 
             except:
                 logging.exception(f'Error processing server {server_domain}')
 
             finally:
-
-                # Log the number of completed and aborted reports
-                logging.info(f'For server {server_domain}, {completed_ct} reports completed, {aborted_ct} reports aborted.')
                 
                 # copy the report files to their final location
                 dest_dir = str(Path(output_path) / server_domain)
@@ -168,6 +109,89 @@ def create_reports(
     finally:
         # copy the temporary logging directory to its final location
         copy_dir_tree(log_dir.name, log_file_path, 'text/plain; charset=ISO-8859-15')
+
+def run_report_set(
+        server_url,
+        param_name,
+        param_values,
+        nb_template_path,
+        rpt_output_path
+    ):
+    """Creates a set of reports by cycling through a set of buildings or organizations
+    and then cycling through a set of Jupyter notebook templates used to create the reports.
+    Input Parameters:
+        server_url: the full URL to BMON server that holds the data
+        param_name: the name of building or organization parameter in the notebook template
+        param_values: a list of values to cycle through for the notebook parameter.
+        nb_template_path: a Path to the directory where the template report notebooks are stored.
+        rpt_output_path: a Path to the directory where the final HTML reports are stored. A
+            subdirectory for each parameter value will be created in this directory to hold all
+            the reports for that particular building or organization.
+    """
+    # extract server domain for message labeling purposes
+    server_domain = urlparse(server_url).netloc
+
+    # create a temporary directory for scratch purposes, and make file
+    # names inside that directory for the calculated report notebook and the HTML
+    # files that is created from that notebook.
+    scratch_dir = tempfile.TemporaryDirectory()
+    out_nb_path = Path(scratch_dir.name) / 'report.ipynb'
+    out_html_path = Path(scratch_dir.name) / 'report.html'
+
+    # Keep track of how many reports completed and aborted
+    completed_ct = 0
+    aborted_ct = 0
+
+    # Loop through all the parameter values (e.g. buildings or organizations)
+    for param_val in param_values:
+        if param_val != 2:
+            continue
+        for rpt_nb_path in nb_template_path.glob('*.ipynb'):
+
+            try:
+                pm.execute_notebook(
+                    str(rpt_nb_path),
+                    str(out_nb_path),
+                    parameters = {'server_web_address': server_url, param_name: param_val},
+                    kernel_name='python3',
+                )
+
+                # get the glued scraps from the notebook
+                nb = sb.read_notebook(str(out_nb_path))
+                scraps = nb.scraps.data_dict
+
+                if 'hide' in scraps and scraps['hide'] == True:
+                    # report is not available, probably due to lack of data
+                    continue
+
+                # convert the notebook to html. throw an error if one occurs.
+                subprocess.run(f'jupyter nbconvert {out_nb_path} --no-input', shell=True, check=True)
+
+                # move the resulting html report to the report directory
+                # first create the destination file name and create the necessary
+                # directories, if they don't exist.
+                dest_name = Path(rpt_nb_path.name).with_suffix('.html')
+                dest_path = rpt_output_path / str(param_val) / dest_name
+                dest_path.parent.mkdir(parents=True, exist_ok=True)
+                out_html_path.replace(dest_path)
+                completed_ct += 1
+
+            except pm.PapermillExecutionError as err:
+                aborted_ct += 1
+                if err.ename == 'RuntimeError':
+                    # This error was raised intentionally to stop notebook execution.
+                    # Just log an info message.
+                    logging.info(f'Report aborted for server={server_domain}, {param_name}={param_val}, report={rpt_nb_path.name}: {err.evalue}')
+                else:
+                    logging.exception(f'Error processing server={server_domain}, {param_name}={param_val}, report={rpt_nb_path.name}')
+
+            except:
+                aborted_ct += 1
+                logging.exception(f'Error processing server={server_domain}, {param_name}={param_val}, report={rpt_nb_path.name}')
+
+    # log the number of completed and aborted reports
+    logging.info(f'For server {server_domain}, report type {param_name}, {completed_ct} reports completed, {aborted_ct} reports aborted.')
+
 
 def test():
     """Run the example configuration file as a test case.
