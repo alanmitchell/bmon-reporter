@@ -8,6 +8,7 @@ import tempfile
 from pathlib import Path
 from urllib.parse import urlparse
 import subprocess
+from typing import Iterable
 
 import boto3
 import papermill as pm       # installed with: pip install papermill[s3], to include S3 IO features.
@@ -18,12 +19,12 @@ from bmonreporter.file_util import copy_dir_tree
 import bmonreporter.config_logging
 
 def create_reports(
-    template_path,      
-    output_path,
-    bmon_urls,
-    jup_theme_cmd,
-    log_level,
-    log_file_path='bmon-reporter-logs/',
+        template_path,      
+        output_path,
+        bmon_urls,
+        jup_theme_cmd,
+        log_level,
+        log_file_path='bmon-reporter-logs/',
     ):
     """Creates all of the reports for Organizations a Buildings across all specified BMON
     servers.
@@ -62,60 +63,64 @@ def create_reports(
 
         # Loop through the BMON servers to process
         for server_url in bmon_urls:
-
-            # extract server domain for message labeling purposes
-            server_domain = urlparse(server_url).netloc
-
-            try:
-                logging.info(f'Processing started for {server_domain}')
-                
-                # create a temporary directory to write reports
-                rpt_dir = tempfile.TemporaryDirectory()
-                rpt_path = Path(rpt_dir.name)
-                
-                # loop through all the buildings of the BMON site, running the building
-                # templates on each.
-                server = bmondata.Server(server_url)
-                bldg_ids = [bldg['id'] for bldg in server.buildings()]
-                run_report_set(
-                    server_url,
-                    'building_id',
-                    bldg_ids,
-                    Path(templ_dir.name) / 'building',
-                    rpt_path / 'building',
-                    )
-
-            except:
-                logging.exception(f'Error processing server {server_domain}')
-
-            finally:
-                
-                # copy the report files to their final location
-                dest_dir = str(Path(output_path) / server_domain)
-
-                # If the destination is s3, the Path concatenation above stripped out a /
-                # that needs to be put back in.
-                if dest_dir.startswith('s3:'):
-                    dest_dir = 's3://' + dest_dir[4:]
-                
-                copy_dir_tree(
-                    str(rpt_path), 
-                    dest_dir
-                )
+            process_server(server_url, templ_dir.name, output_path)
 
     except:
         logging.exception('Error setting up reporter.')
 
-    finally:
-        # copy the temporary logging directory to its final location
-        copy_dir_tree(log_dir.name, log_file_path, 'text/plain; charset=ISO-8859-15')
+    # copy the temporary logging directory to its final location
+    copy_dir_tree(log_dir.name, log_file_path, 'text/plain; charset=ISO-8859-15')
+
+def process_server(server_url: str, template_dir: str, output_dir: str):
+    """Create the reports for one BMON server with the base URL of 'server_url'.
+    Pull report template notebooks from the 'template_dir' directory.
+    Copy the reports to the directory specificed by 'output_dir', placed in a
+    subdirectory named after the server_url.
+    """
+    # extract server domain for message labeling purposes
+    server_domain = urlparse(server_url).netloc
+
+    try:
+        logging.info(f'Processing started for {server_domain}')
+        
+        # create a temporary directory to write reports
+        rpt_dir = tempfile.TemporaryDirectory()
+        rpt_path = Path(rpt_dir.name)
+        
+        # loop through all the buildings of the BMON site, running the building
+        # templates on each.
+        server = bmondata.Server(server_url)
+        bldg_ids = [bldg['id'] for bldg in server.buildings()]
+        run_report_set(
+            server_url,
+            'building_id',
+            bldg_ids,
+            Path(template_dir) / 'building',
+            rpt_path / 'building',
+            )
+
+    except:
+        logging.exception(f'Error processing server {server_domain}')
+
+    # copy the report files to their final location
+    dest_dir = str(Path(output_dir) / server_domain)
+
+    # If the destination is s3, the Path concatenation above stripped out a /
+    # that needs to be put back in.
+    if dest_dir.startswith('s3:'):
+        dest_dir = 's3://' + dest_dir[4:]
+    
+    copy_dir_tree(
+        str(rpt_path), 
+        dest_dir
+    )
 
 def run_report_set(
-        server_url,
-        param_name,
-        param_values,
-        nb_template_path,
-        rpt_output_path
+        server_url: str,
+        param_name: str,
+        param_values: Iterable,
+        nb_template_path: Path,
+        rpt_output_path: Path,
     ):
     """Creates a set of reports by cycling through a set of buildings or organizations
     and then cycling through a set of Jupyter notebook templates used to create the reports.
