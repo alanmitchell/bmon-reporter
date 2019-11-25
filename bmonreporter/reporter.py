@@ -9,6 +9,8 @@ from pathlib import Path
 from urllib.parse import urlparse
 import subprocess
 from typing import Iterable
+from multiprocessing import Pool
+from functools import partial
 
 import boto3
 import papermill as pm       # installed with: pip install papermill[s3], to include S3 IO features.
@@ -61,9 +63,17 @@ def create_reports(
         # copy the report templates into this directory
         copy_dir_tree(template_path, templ_dir.name)
 
-        # Loop through the BMON servers to process
-        for server_url in bmon_urls:
-            process_server(server_url, templ_dir.name, output_path)
+        # Loop through the BMON servers to process, but use the multiprocessing
+        # module to do this in multiple processes.  To use multriprocessing you 
+        # need to have a function with one parameter; create that with
+        # functools.partial.
+        server_func = partial(
+            process_server, 
+            template_dir=templ_dir.name,
+            output_dir=output_path 
+            )
+        with Pool(2) as p:
+            p.map(server_func, bmon_urls)
 
     except:
         logging.exception('Error setting up reporter.')
