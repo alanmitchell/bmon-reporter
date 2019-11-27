@@ -21,28 +21,30 @@ from bmonreporter.file_util import copy_dir_tree
 import bmonreporter.config_logging
 
 def create_reports(
-        template_path,      
-        output_path,
+        template_dir,      
+        output_dir,
         bmon_urls,
         jup_theme_cmd,
         log_level,
-        log_file_path='bmon-reporter-logs/',
+        log_file_dir='bmon-reporter-logs/',
+        cores=1,
     ):
     """Creates all of the reports for Organizations a Buildings across all specified BMON
     servers.
 
     Input Parameters:
 
-    template_path: directory or S3 bucket + prefix where notebook report templates 
+    template_dir: directory or S3 bucket + prefix where notebook report templates 
         are stored.  Specify an S3 bucket and prefix by:  s3://bucket/prefix-to-templates
-    output_path: directory or S3 bucket + prefix where created reports are stored.
+    output_dir: directory or S3 bucket + prefix where created reports are stored.
     bmon_urls: a list or iterable containing the base BMON Server URLs that should be 
         processed for creating reports.  e.g. ['https://bms.ahfc.us', 'https://bmon.analysisnorth.com']
     jup_theme_cmd: this is the Jupyter Theme command to run prior to generating reports.  This will
         set the formatting of the notebooks.  See: https://github.com/dunovank/jupyter-themes
     log_level: string indicating detail of logging to occur: DEBUG, INFO, WARNING, ERROR
-    log_file_path: directory or S3 bucket + prefix to store log files from report
+    log_file_dir: (optional) directory or S3 bucket + prefix to store log files from report
         creation; defaults to 'bmon-report-logs' in current directory.
+    cores: (optional) # of cores available to process this script.  Defaults to 1.
     """
 
     # set up logging
@@ -61,7 +63,7 @@ def create_reports(
         # temporary directory for report templates
         templ_dir = tempfile.TemporaryDirectory()
         # copy the report templates into this directory
-        copy_dir_tree(template_path, templ_dir.name)
+        copy_dir_tree(template_dir, templ_dir.name)
 
         # Loop through the BMON servers to process, but use the multiprocessing
         # module to do this in multiple processes.  To use multriprocessing you 
@@ -70,16 +72,17 @@ def create_reports(
         server_func = partial(
             process_server, 
             template_dir=templ_dir.name,
-            output_dir=output_path 
+            output_dir=output_dir 
             )
-        with Pool(2) as p:
+        cores_to_use = min(len(bmon_urls), cores)
+        with Pool(cores_to_use) as p:
             p.map(server_func, bmon_urls)
-
+        
     except:
         logging.exception('Error setting up reporter.')
 
     # copy the temporary logging directory to its final location
-    copy_dir_tree(log_dir.name, log_file_path, 'text/plain; charset=ISO-8859-15')
+    copy_dir_tree(log_dir.name, log_file_dir, 'text/plain; charset=ISO-8859-15')
 
 def process_server(server_url: str, template_dir: str, output_dir: str):
     """Create the reports for one BMON server with the base URL of 'server_url'.
@@ -108,6 +111,15 @@ def process_server(server_url: str, template_dir: str, output_dir: str):
             Path(template_dir) / 'building',
             rpt_path / 'building',
             )
+
+        org_ids = [org['id'] for org in server.organizations()]
+        #run_report_set(
+        #    server_url,
+        #    'organization_id',
+        #    org_ids,
+        #    Path(template_dir) / 'organization',
+        #    rpt_path / 'organization',
+        #    )
 
     except:
         logging.exception(f'Error processing server {server_domain}')
