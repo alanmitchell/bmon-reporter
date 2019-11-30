@@ -24,4 +24,4 @@ jup_theme_cmd: jt -t grade3 -cellw 95% -lineh 150 -fs 105 -nfs 120 -tfs 130 -dfs
 
 # The number of cores available for processing this script.  Allocating more cores
 # will increase processing speed.
-cores: 1
+cores: 2

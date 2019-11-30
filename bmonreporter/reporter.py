@@ -11,6 +11,7 @@ import subprocess
 from typing import Iterable
 from multiprocessing import Pool
 from functools import partial
+import pickle
 
 import boto3
 import papermill as pm       # installed with: pip install papermill[s3], to include S3 IO features.
@@ -104,22 +105,26 @@ def process_server(server_url: str, template_dir: str, output_dir: str):
         # templates on each.
         server = bmondata.Server(server_url)
         bldg_ids = [bldg['id'] for bldg in server.buildings()]
-        run_report_set(
+        bldg_rpt_dict = run_report_set(
             server_url,
             'building_id',
             bldg_ids,
             Path(template_dir) / 'building',
             rpt_path / 'building',
             )
+        # save the report dictionary into a pickle file
+        pickle.dump(bldg_rpt_dict, open(rpt_path / 'building.pkl', 'wb'))
 
         org_ids = [org['id'] for org in server.organizations()]
-        #run_report_set(
+        #org_rpt_dict = run_report_set(
         #    server_url,
         #    'organization_id',
         #    org_ids,
         #    Path(template_dir) / 'organization',
         #    rpt_path / 'organization',
         #    )
+        # save the report dictionary into a pickle file
+        # pickle.dump(org_rpt_dict, open(rpt_path / 'organization.pkl', 'wb'))
 
     except:
         logging.exception(f'Error processing server {server_domain}')
