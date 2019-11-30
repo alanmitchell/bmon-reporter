@@ -154,9 +154,17 @@ def run_report_set(
         rpt_output_path: a Path to the directory where the final HTML reports are stored. A
             subdirectory for each parameter value will be created in this directory to hold all
             the reports for that particular building or organization.
+
+    Returns a dictionary keyed on parameter value that lists the reports for that
+    parameter value; each item in the list is a dictionary describing the report.
     """
     # extract server domain for message labeling purposes
     server_domain = urlparse(server_url).netloc
+
+    # Make a dictionary to keep track of the reports created for each parameter
+    # value.  Key is paramater value, value is list of report records.  Each report
+    # record is a dictionary giving info about the report.
+    report_dict = {}
 
     # create a temporary directory for scratch purposes, and make file
     # names inside that directory for the calculated report notebook and the HTML
@@ -173,6 +181,7 @@ def run_report_set(
     for param_val in param_values:
         if param_val != 2:
             continue
+        rpts = []   # a list of reports for this parameter value
         for rpt_nb_path in nb_template_path.glob('*.ipynb'):
 
             try:
@@ -201,6 +210,15 @@ def run_report_set(
                 dest_path = rpt_output_path / str(param_val) / dest_name
                 dest_path.parent.mkdir(parents=True, exist_ok=True)
                 out_html_path.replace(dest_path)
+
+                # Add to the dictionary of completed reports.
+                rpts.append(
+                    {
+                        'title': scraps['title'],
+                        'sort_order': scraps['sort_order'],
+                        'file_name': str(dest_name),
+                    }
+                )
                 completed_ct += 1
 
             except pm.PapermillExecutionError as err:
@@ -216,9 +234,16 @@ def run_report_set(
                 aborted_ct += 1
                 logging.exception(f'Error processing server={server_domain}, {param_name}={param_val}, report={rpt_nb_path.name}')
 
+        # sort the reports in sort order for this parameter value
+        rpts = sorted(rpts, key=lambda r: (r['sort_order'], r['title']))
+        # only include if reports are present.
+        if rpts:
+            report_dict[param_val] = rpts
+        
     # log the number of completed and aborted reports
     logging.info(f'For server {server_domain}, report type {param_name}, {completed_ct} reports completed, {aborted_ct} reports aborted.')
 
+    return report_dict
 
 def test():
     """Run the example configuration file as a test case.
