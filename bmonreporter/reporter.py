@@ -115,16 +115,17 @@ def process_server(server_url: str, template_dir: str, output_dir: str):
         # save the report dictionary into a pickle file
         pickle.dump(bldg_rpt_dict, open(rpt_path / 'building.pkl', 'wb'))
 
-        org_ids = [org['id'] for org in server.organizations()]
-        #org_rpt_dict = run_report_set(
-        #    server_url,
-        #    'organization_id',
-        #    org_ids,
-        #    Path(template_dir) / 'organization',
-        #    rpt_path / 'organization',
-        #    )
+        # List of the organization IDs including ID = 0 for all organizations.
+        org_ids = [0] + [org['id'] for org in server.organizations()]
+        org_rpt_dict = run_report_set(
+           server_url,
+           'organization_id',
+           org_ids,
+           Path(template_dir) / 'organization',
+           rpt_path / 'organization',
+           )
         # save the report dictionary into a pickle file
-        # pickle.dump(org_rpt_dict, open(rpt_path / 'organization.pkl', 'wb'))
+        pickle.dump(org_rpt_dict, open(rpt_path / 'organization.pkl', 'wb'))
 
     except:
         logging.exception(f'Error processing server {server_domain}')
@@ -184,8 +185,6 @@ def run_report_set(
 
     # Loop through all the parameter values (e.g. buildings or organizations)
     for param_val in param_values:
-        if param_val != 2:
-            continue
         rpts = []   # a list of reports for this parameter value
         for rpt_nb_path in nb_template_path.glob('*.ipynb'):
 
