@@ -119,7 +119,7 @@ def process_server(server_url: str, template_dir: str, output_dir: str):
         org_ids = [0] + [org['id'] for org in server.organizations()]
         org_rpt_dict = run_report_set(
            server_url,
-           'organization_id',
+           'org_id',
            org_ids,
            Path(template_dir) / 'organization',
            rpt_path / 'organization',
