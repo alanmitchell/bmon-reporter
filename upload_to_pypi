@@ -1,0 +1,7 @@
+#!/bin/bash
+
+# Makes distribution and uploads to PyPi
+# Make sure to increase version number in bmonreporter/__init__.py
+
+python setup.py sdist bdist_wheel
+twine upload --skip-existing dist/*
