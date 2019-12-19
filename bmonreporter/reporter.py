@@ -12,6 +12,7 @@ from typing import Iterable
 from multiprocessing import Pool
 from functools import partial
 import pickle
+import json
 
 import boto3
 import papermill as pm       # installed with: pip install papermill[s3], to include S3 IO features.
@@ -112,8 +113,9 @@ def process_server(server_url: str, template_dir: str, output_dir: str):
             Path(template_dir) / 'building',
             rpt_path / 'building',
             )
-        # save the report dictionary into a pickle file
+        # save the report dictionary into a pickle file and a JSON file
         pickle.dump(bldg_rpt_dict, open(rpt_path / 'building.pkl', 'wb'))
+        json.dump(bldg_rpt_dict, open(rpt_path / 'building.json', 'w'))
 
         # List of the organization IDs including ID = 0 for all organizations.
         org_ids = [0] + [org['id'] for org in server.organizations()]
@@ -124,8 +126,9 @@ def process_server(server_url: str, template_dir: str, output_dir: str):
            Path(template_dir) / 'organization',
            rpt_path / 'organization',
            )
-        # save the report dictionary into a pickle file
+        # save the report dictionary into a pickle file and a JSON file.
         pickle.dump(org_rpt_dict, open(rpt_path / 'organization.pkl', 'wb'))
+        json.dump(org_rpt_dict, open(rpt_path / 'organization.json', 'w'))
 
     except:
         logging.exception(f'Error processing server {server_domain}')
