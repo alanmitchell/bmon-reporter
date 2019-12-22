@@ -82,9 +82,13 @@ def create_reports(
         
     except:
         logging.exception('Error setting up reporter.')
+        
+    finally:
+        templ_dir.cleanup()
 
     # copy the temporary logging directory to its final location
     copy_dir_tree(log_dir.name, log_file_dir, 'text/plain; charset=ISO-8859-15')
+    log_dir.cleanup()
 
 def process_server(server_url: str, template_dir: str, output_dir: str):
     """Create the reports for one BMON server with the base URL of 'server_url'.
@@ -132,6 +136,9 @@ def process_server(server_url: str, template_dir: str, output_dir: str):
 
     except:
         logging.exception(f'Error processing server {server_domain}')
+        
+    finally:
+        rpt_dir.cleanup()
 
     # copy the report files to their final location
     dest_dir = str(Path(output_dir) / server_domain)
@@ -250,6 +257,8 @@ def run_report_set(
     # log the number of completed and aborted reports
     logging.info(f'For server {server_domain}, report type {param_name}, {completed_ct} reports completed, {aborted_ct} reports aborted.')
 
+    scratch_dir.cleanup()
+    
     return report_dict
 
 def test():
