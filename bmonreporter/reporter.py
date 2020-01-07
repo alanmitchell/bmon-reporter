@@ -134,24 +134,25 @@ def process_server(server_url: str, template_dir: str, output_dir: str):
         pickle.dump(org_rpt_dict, open(rpt_path / 'organization.pkl', 'wb'))
         json.dump(org_rpt_dict, open(rpt_path / 'organization.json', 'w'))
 
+        # copy the report files to their final location
+        dest_dir = str(Path(output_dir) / server_domain)
+
+        # If the destination is s3, the Path concatenation above stripped out a /
+        # that needs to be put back in.
+        if dest_dir.startswith('s3:'):
+            dest_dir = 's3://' + dest_dir[4:]
+        
+        copy_dir_tree(
+            str(rpt_path), 
+            dest_dir
+        )
+
     except:
         logging.exception(f'Error processing server {server_domain}')
         
     finally:
         rpt_dir.cleanup()
 
-    # copy the report files to their final location
-    dest_dir = str(Path(output_dir) / server_domain)
-
-    # If the destination is s3, the Path concatenation above stripped out a /
-    # that needs to be put back in.
-    if dest_dir.startswith('s3:'):
-        dest_dir = 's3://' + dest_dir[4:]
-    
-    copy_dir_tree(
-        str(rpt_path), 
-        dest_dir
-    )
 
 def run_report_set(
         server_url: str,
