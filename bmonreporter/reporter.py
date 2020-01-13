@@ -51,19 +51,15 @@ def create_reports(
     """
 
     try:
-        # Set up the main temporary directory, which will have folders for all the
-        # needed temporary directories.  Here will be the structure:
+        # Set up a main temporary directory, which will have folders for logs
+        # and templates. Here will be the structure:
         # ├── bmonreporter_<temp directory id>
-        #     ├── logs            # log files
+        #     ├── logs            # log files
         #     ├── templates       # Jupyter templates
-        #     ├── working         # scratch directory used to create reports
-        #     ├── reports         # created reports are stored here before upload
-        temp_dir = tempfile.TemporaryDirectory()
+        temp_dir = tempfile.TemporaryDirectory(prefix='bmonreporter_')
         temp_dir_path = Path(temp_dir.name)
         (temp_dir_path / 'logs').mkdir()
         (temp_dir_path / 'templates').mkdir()
-        (temp_dir_path / 'working').mkdir()
-        (temp_dir_path / 'reports').mkdir()
 
         # set up logging
         bmonreporter.config_logging.configure_logging(
@@ -85,7 +81,7 @@ def create_reports(
             # functools.partial.
             server_func = partial(
                 process_server, 
-                temp_path=temp_dir_path,
+                template_path=temp_dir_path / 'templates',
                 output_dir=output_dir 
                 )
             cores_to_use = min(len(bmon_urls), cores)
@@ -105,10 +101,9 @@ def create_reports(
         # Clean up the main temporary directory
         temp_dir.cleanup()
 
-def process_server(server_url: str, temp_path: Path, output_dir: str):
+def process_server(server_url: str, template_path: Path, output_dir: str):
     """Create the reports for one BMON server with the base URL of 'server_url'.
-    'temp_path' is the main temporary directory Path, which contains
-    subdirectories needed by this method.
+    'template_path' is the Path to the Jupyter templates
     Copy the reports to the directory specified by 'output_dir', placed in a
     subdirectory named after the server_url.
     """
@@ -117,12 +112,15 @@ def process_server(server_url: str, temp_path: Path, output_dir: str):
 
     try:
         logging.info(f'Processing started for {server_domain}')
-        
-        # clear out the temporary directory that will contain the reports.
-        rpt_path = temp_path / 'reports'
-        shutil.rmtree(rpt_path)     # removing directory to clear it out
-        rpt_path.mkdir()            # recreate directory
-        
+
+        # Make a working directory and a reports directory for this server
+        server_dir = tempfile.TemporaryDirectory(prefix=f'bm_{urlparse(server_url).netloc}_')
+        server_path = Path(server_dir.name)
+        rpt_path = server_path / 'reports'
+        rpt_path.mkdir()
+        working_path = server_path / 'working'
+        working_path.mkdir()
+
         # loop through all the buildings of the BMON site, running the building
         # templates on each.
         server = bmondata.Server(server_url)
@@ -131,8 +129,8 @@ def process_server(server_url: str, temp_path: Path, output_dir: str):
             server_url,
             'building_id',
             bldg_ids,
-            temp_path / 'working',
-            temp_path / 'templates/building',
+            working_path,
+            template_path / 'building',
             rpt_path / 'building',
             )
         # save the report dictionary into a pickle file and a JSON file
@@ -145,29 +143,36 @@ def process_server(server_url: str, temp_path: Path, output_dir: str):
            server_url,
            'org_id',
            org_ids,
-           temp_path / 'working',
-           temp_path / 'templates/organization',
+           working_path,
+           template_path / 'organization',
            rpt_path / 'organization',
            )
         # save the report dictionary into a pickle file and a JSON file.
         pickle.dump(org_rpt_dict, open(rpt_path / 'organization.pkl', 'wb'))
         json.dump(org_rpt_dict, open(rpt_path / 'organization.json', 'w'))
 
-        # copy the report files to their final location
-        dest_dir = str(Path(output_dir) / server_domain)
-
-        # If the destination is s3, the Path concatenation above stripped out a /
-        # that needs to be put back in.
-        if dest_dir.startswith('s3:'):
-            dest_dir = 's3://' + dest_dir[4:]
-        
-        copy_dir_tree(
-            str(rpt_path), 
-            dest_dir
-        )
-
     except:
         logging.exception(f'Error processing server {server_domain}')
+
+    finally:
+        try:
+            # copy the report files to their final location
+            dest_dir = str(Path(output_dir) / server_domain)
+
+            # If the destination is s3, the Path concatenation above stripped out a /
+            # that needs to be put back in.
+            if dest_dir.startswith('s3:'):
+                dest_dir = 's3://' + dest_dir[4:]
+            
+            copy_dir_tree(
+                str(rpt_path), 
+                dest_dir
+            )
+
+        except:
+            logging.exception(f'Error copying report files to final destination, {server_domain}.')
+
+        server_dir.cleanup()
 
 def run_report_set(
         server_url: str,
