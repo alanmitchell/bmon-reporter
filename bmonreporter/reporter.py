@@ -6,6 +6,7 @@ import sys
 import logging
 import tempfile
 from pathlib import Path
+import shutil
 from urllib.parse import urlparse
 import subprocess
 from typing import Iterable
@@ -49,51 +50,66 @@ def create_reports(
     cores: (optional) # of cores available to process this script.  Defaults to 1.
     """
 
-    # set up logging
-    # temporary directory for log files
-    log_dir = tempfile.TemporaryDirectory()
-    bmonreporter.config_logging.configure_logging(
-        logging, 
-        Path(log_dir.name) / 'bmonreporter.log', 
-        log_level
-    )
-
     try:
-        # Run the Jupyter Themes command to get correct formatting of the notebook reports.
-        subprocess.run(jup_theme_cmd, shell=True, check=True)
+        # Set up the main temporary directory, which will have folders for all the
+        # needed temporary directories.  Here will be the structure:
+        # ├── bmonreporter_<temp directory id>
+        #     ├── logs            # log files
+        #     ├── templates       # Jupyter templates
+        #     ├── working         # scratch directory used to create reports
+        #     ├── reports         # created reports are stored here before upload
+        temp_dir = tempfile.TemporaryDirectory()
+        temp_dir_path = Path(temp_dir.name)
+        (temp_dir_path / 'logs').mkdir()
+        (temp_dir_path / 'templates').mkdir()
+        (temp_dir_path / 'working').mkdir()
+        (temp_dir_path / 'reports').mkdir()
 
-        # temporary directory for report templates
-        templ_dir = tempfile.TemporaryDirectory()
-        # copy the report templates into this directory
-        copy_dir_tree(template_dir, templ_dir.name)
+        # set up logging
+        bmonreporter.config_logging.configure_logging(
+            logging, 
+            temp_dir_path / 'logs/bmonreporter.log', 
+            log_level
+        )
 
-        # Loop through the BMON servers to process, but use the multiprocessing
-        # module to do this in multiple processes.  To use multriprocessing you 
-        # need to have a function with one parameter; create that with
-        # functools.partial.
-        server_func = partial(
-            process_server, 
-            template_dir=templ_dir.name,
-            output_dir=output_dir 
-            )
-        cores_to_use = min(len(bmon_urls), cores)
-        with Pool(cores_to_use) as p:
-            p.map(server_func, bmon_urls)
-        
-    except:
-        logging.exception('Error setting up reporter.')
-        
+        try:
+            # Run the Jupyter Themes command to get correct formatting of the notebook reports.
+            subprocess.run(jup_theme_cmd, shell=True, check=True)
+
+            # copy the report templates into the temporary template directory
+            copy_dir_tree(template_dir, str(temp_dir_path / 'templates'))
+
+            # Loop through the BMON servers to process, but use the multiprocessing
+            # module to do this in multiple processes.  To use multriprocessing you 
+            # need to have a function with one parameter; create that with
+            # functools.partial.
+            server_func = partial(
+                process_server, 
+                temp_path=temp_dir_path,
+                output_dir=output_dir 
+                )
+            cores_to_use = min(len(bmon_urls), cores)
+            with Pool(cores_to_use) as p:
+                p.map(server_func, bmon_urls)
+            
+        except:
+            logging.exception('Error setting up reporter.')
+            
     finally:
-        templ_dir.cleanup()
+        # copy the temporary logging directory to its final location
+        try:
+            copy_dir_tree(str(temp_dir_path / 'logs'), log_file_dir, 'text/plain; charset=ISO-8859-15')
+        except:
+            logging.exception('Error uploading logging directory.')
+        
+        # Clean up the main temporary directory
+        temp_dir.cleanup()
 
-    # copy the temporary logging directory to its final location
-    copy_dir_tree(log_dir.name, log_file_dir, 'text/plain; charset=ISO-8859-15')
-    log_dir.cleanup()
-
-def process_server(server_url: str, template_dir: str, output_dir: str):
+def process_server(server_url: str, temp_path: Path, output_dir: str):
     """Create the reports for one BMON server with the base URL of 'server_url'.
-    Pull report template notebooks from the 'template_dir' directory.
-    Copy the reports to the directory specificed by 'output_dir', placed in a
+    'temp_path' is the main temporary directory Path, which contains
+    subdirectories needed by this method.
+    Copy the reports to the directory specified by 'output_dir', placed in a
     subdirectory named after the server_url.
     """
     # extract server domain for message labeling purposes
@@ -102,9 +118,10 @@ def process_server(server_url: str, template_dir: str, output_dir: str):
     try:
         logging.info(f'Processing started for {server_domain}')
         
-        # create a temporary directory to write reports
-        rpt_dir = tempfile.TemporaryDirectory()
-        rpt_path = Path(rpt_dir.name)
+        # clear out the temporary directory that will contain the reports.
+        rpt_path = temp_path / 'reports'
+        shutil.rmtree(rpt_path)     # removing directory to clear it out
+        rpt_path.mkdir()            # recreate directory
         
         # loop through all the buildings of the BMON site, running the building
         # templates on each.
@@ -114,7 +131,8 @@ def process_server(server_url: str, template_dir: str, output_dir: str):
             server_url,
             'building_id',
             bldg_ids,
-            Path(template_dir) / 'building',
+            temp_path / 'working',
+            temp_path / 'templates/building',
             rpt_path / 'building',
             )
         # save the report dictionary into a pickle file and a JSON file
@@ -127,7 +145,8 @@ def process_server(server_url: str, template_dir: str, output_dir: str):
            server_url,
            'org_id',
            org_ids,
-           Path(template_dir) / 'organization',
+           temp_path / 'working',
+           temp_path / 'templates/organization',
            rpt_path / 'organization',
            )
         # save the report dictionary into a pickle file and a JSON file.
@@ -149,15 +168,12 @@ def process_server(server_url: str, template_dir: str, output_dir: str):
 
     except:
         logging.exception(f'Error processing server {server_domain}')
-        
-    finally:
-        rpt_dir.cleanup()
-
 
 def run_report_set(
         server_url: str,
         param_name: str,
         param_values: Iterable,
+        working_path: Path,
         nb_template_path: Path,
         rpt_output_path: Path,
     ):
@@ -167,6 +183,7 @@ def run_report_set(
         server_url: the full URL to BMON server that holds the data
         param_name: the name of building or organization parameter in the notebook template
         param_values: a list of values to cycle through for the notebook parameter.
+        working_path: the Path to a working directory for use by this routine
         nb_template_path: a Path to the directory where the template report notebooks are stored.
         rpt_output_path: a Path to the directory where the final HTML reports are stored. A
             subdirectory for each parameter value will be created in this directory to hold all
@@ -183,12 +200,10 @@ def run_report_set(
     # record is a dictionary giving info about the report.
     report_dict = {}
 
-    # create a temporary directory for scratch purposes, and make file
-    # names inside that directory for the calculated report notebook and the HTML
-    # files that is created from that notebook.
-    scratch_dir = tempfile.TemporaryDirectory()
-    out_nb_path = Path(scratch_dir.name) / 'report.ipynb'
-    out_html_path = Path(scratch_dir.name) / 'report.html'
+    # Make file names for the calculate notebook being currently run and 
+    # the HTML report that is created from that template.
+    out_nb_path = working_path / 'report.ipynb'
+    out_html_path = working_path / 'report.html'
 
     # Keep track of how many reports completed and aborted
     completed_ct = 0
@@ -257,8 +272,6 @@ def run_report_set(
         
     # log the number of completed and aborted reports
     logging.info(f'For server {server_domain}, report type {param_name}, {completed_ct} reports completed, {aborted_ct} reports aborted.')
-
-    scratch_dir.cleanup()
     
     return report_dict
 
