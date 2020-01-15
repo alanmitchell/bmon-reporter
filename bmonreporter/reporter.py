@@ -124,7 +124,8 @@ def process_server(server_url: str, template_path: Path, output_dir: str):
         # loop through all the buildings of the BMON site, running the building
         # templates on each.
         server = bmondata.Server(server_url)
-        bldg_ids = [bldg['id'] for bldg in server.buildings()]
+        bldgs = server.buildings()     # all buildings
+        bldg_ids = [bldg['id'] for bldg in bldgs]
         bldg_rpt_dict = run_report_set(
             server_url,
             'building_id',
@@ -138,7 +139,8 @@ def process_server(server_url: str, template_path: Path, output_dir: str):
         json.dump(bldg_rpt_dict, open(rpt_path / 'building.json', 'w'))
 
         # List of the organization IDs including ID = 0 for all organizations.
-        org_ids = [0] + [org['id'] for org in server.organizations()]
+        orgs = server.organizations()     # all organizations
+        org_ids = [0] + [org['id'] for org in orgs]
         org_rpt_dict = run_report_set(
            server_url,
            'org_id',
@@ -150,6 +152,26 @@ def process_server(server_url: str, template_path: Path, output_dir: str):
         # save the report dictionary into a pickle file and a JSON file.
         pickle.dump(org_rpt_dict, open(rpt_path / 'organization.pkl', 'wb'))
         json.dump(org_rpt_dict, open(rpt_path / 'organization.json', 'w'))
+
+        # Add some additional files that give full list of organizations and a 
+        # mapping between each organization and the buildings associated with it.
+        # This info will allow someone to build a report viewing application 
+        # without having to make any API calls to the BMON server directly.  Also,
+        # this information will be time-consistent with the generated reports.
+
+        # Title and ID of every organization, including ID = 0, which represents
+        # all organizations.
+        all_orgs = [('All Organizations', 0)] + [(org['title'], org['id']) for org in orgs]
+        pickle.dump(all_orgs, open(rpt_path / 'all_orgs.pkl', 'wb'))
+        json.dump(all_orgs, open(rpt_path / 'all_orgs.json', 'w'))
+
+        # Dictionary mapping an Organization to a list of Buildings, each building
+        # having a title and an ID.  Organization 0 maps to all buildings.
+        org_to_bldgs = {0: [(bldg['title'], bldg['id']) for bldg in bldgs]}
+        for org in orgs:
+            org_to_bldgs[org['id']] =  [(bldg[1], bldg[0]) for bldg in org['buildings']]
+        pickle.dump(org_to_bldgs, open(rpt_path / 'org_to_bldgs.pkl', 'wb'))
+        json.dump(org_to_bldgs, open(rpt_path / 'org_to_bldgs.json', 'w'))
 
     except:
         logging.exception(f'Error processing server {server_domain}')
