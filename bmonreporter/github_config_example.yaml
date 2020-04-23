@@ -1,7 +1,3 @@
-# directory or S3 bucket + prefix where notebook report templates 
-# are stored.  Specify an S3 bucket and prefix by:  s3://bucket/prefix-to-templates
-template_dir: s3://bmonreporter/templates
-
 # directory or S3 bucket + prefix where created reports are stored.
 output_dir: s3://bmonreporter/reports
 
@@ -16,12 +12,5 @@ bmon_urls:
 # if this entry is not present.
 log_file_dir: s3://bmonreporter/logs 
 
-# logging level: DEBUG, INFO, WARNING, ERROR
-log_level:  INFO
-
 # The jupyter themes command to execute before creating the reports
 jup_theme_cmd: jt -t grade3 -cellw 95% -lineh 150 -fs 105 -nfs 120 -tfs 130 -dfs 100 -ofs 100
-
-# The number of cores available for processing this script.  Allocating more cores
-# will increase processing speed.
-cores: 2
