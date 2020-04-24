@@ -56,7 +56,6 @@ def create_reports(
         temp_dir = tempfile.TemporaryDirectory(prefix='bmonreporter_')
         temp_dir_path = Path(temp_dir.name)
         (temp_dir_path / 'logs').mkdir()
-        (temp_dir_path / 'templates').mkdir()
 
         # set up logging
         bmonreporter.config_logging.configure_logging(
@@ -66,24 +65,12 @@ def create_reports(
         )
 
         try:
-            # Run the Jupyter Themes command to get correct formatting of the notebook reports.
-            subprocess.run(jup_theme_cmd, shell=True, check=True)
 
-            # copy the report templates into the temporary template directory
-            copy_dir_tree(template_dir, str(temp_dir_path / 'templates'))
-
-            # Loop through the BMON servers to process, but use the multiprocessing
-            # module to do this in multiple processes.  To use multriprocessing you 
-            # need to have a function with one parameter; create that with
-            # functools.partial.
-            server_func = partial(
-                process_server, 
-                template_path=temp_dir_path / 'templates',
-                output_dir=output_dir 
-                )
-            cores_to_use = min(len(bmon_urls), cores)
+            # Loop through the Git repos to process, but use the multiprocessing
+            # module to do this in multiple processes.
+            cores_to_use = min(len(source_repos), cores)
             with Pool(cores_to_use) as p:
-                p.map(server_func, bmon_urls)
+                p.map(process_repo, source_repos)
             
         except:
             logging.exception('Error setting up reporter.')
