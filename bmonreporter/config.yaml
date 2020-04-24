@@ -1,0 +1,21 @@
+# These are the GitHub repositories that are looped through to determine the BMON
+# servers to scan and the Jupyter Notebook reports to run.  Each GitHub repo contains
+# the Jupyter Notebook templates that produce the energy reports and contain a
+# configuration file that determines what BMON servers to apply the reports to.
+# If the "branch" key is not present for a repo, the "master" branch is used.
+source_repos:
+  - git_spec: git@github.com:alanmitchell/bmonreporter-templates.git
+  - git_spec: git@github.com:alanmitchell/bmonreporter-templates.git
+    branch: revised
+
+# directory or S3 bucket + prefix to store log files from report
+# creation; defaults to 'bmon-report-logs' in current directory
+# if this entry is not present.
+log_file_dir: s3://bmonreporter/logs 
+
+# logging level: DEBUG, INFO, WARNING, ERROR
+log_level:  INFO
+
+# The number of cores available for processing this script.  Allocating more cores
+# will increase processing speed.
+cores: 2
