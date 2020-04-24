@@ -34,8 +34,7 @@ setuptools.setup(
         'papermill>=1.2.0',
         'nteract-scrapbook>=0.3.1',
         'bmondata>=1.0.2',
-        'plotly==3.10.0',
-        'plotly_express==0.3.1',
+        'plotly>=4.6.0',
         'jupyterthemes>=0.20.0',
     ]
 )
