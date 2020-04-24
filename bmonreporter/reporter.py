@@ -48,11 +48,9 @@ def create_reports(
     """
 
     try:
-        # Set up a main temporary directory, which will have folders for logs
-        # and templates. Here will be the structure:
+        # Set up a main temporary directory, which will have a folder for logs.
         # ├── bmonreporter_<temp directory id>
         #     ├── logs            # log files
-        #     ├── templates       # Jupyter templates
         temp_dir = tempfile.TemporaryDirectory(prefix='bmonreporter_')
         temp_dir_path = Path(temp_dir.name)
         (temp_dir_path / 'logs').mkdir()
