@@ -14,6 +14,7 @@ from multiprocessing import Pool
 from functools import partial
 import pickle
 import json
+import yaml
 
 import boto3
 import papermill as pm       # installed with: pip install papermill[s3], to include S3 IO features.
@@ -24,10 +25,7 @@ from bmonreporter.file_util import copy_dir_tree
 import bmonreporter.config_logging
 
 def create_reports(
-        template_dir,      
-        output_dir,
-        bmon_urls,
-        jup_theme_cmd,
+        source_repos,
         log_level,
         log_file_dir='bmon-reporter-logs/',
         cores=1,
@@ -37,13 +35,12 @@ def create_reports(
 
     Input Parameters:
 
-    template_dir: directory or S3 bucket + prefix where notebook report templates 
-        are stored.  Specify an S3 bucket and prefix by:  s3://bucket/prefix-to-templates
-    output_dir: directory or S3 bucket + prefix where created reports are stored.
-    bmon_urls: a list or iterable containing the base BMON Server URLs that should be 
-        processed for creating reports.  e.g. ['https://bms.ahfc.us', 'https://bmon.analysisnorth.com']
-    jup_theme_cmd: this is the Jupyter Theme command to run prior to generating reports.  This will
-        set the formatting of the notebooks.  See: https://github.com/dunovank/jupyter-themes
+    source_repos: a list of dictionaries, one dictionary for each GitHub repository containing
+        notebook report templates and configuration info.  The dictionary must have a 'git_spec'
+        key indicating the GitHub spec used to clone the repo, 
+        eg. git@github.com:alanmitchell/bmonreporter-templates.git.  A 'branch' key is optional
+        indicating which branch of the repo to use; if the 'branch' key of the dictionary is not
+        present, the 'master' branch is used.
     log_level: string indicating detail of logging to occur: DEBUG, INFO, WARNING, ERROR
     log_file_dir: (optional) directory or S3 bucket + prefix to store log files from report
         creation; defaults to 'bmon-report-logs' in current directory.
@@ -101,16 +98,61 @@ def create_reports(
         # Clean up the main temporary directory
         temp_dir.cleanup()
 
+def process_repo(git_info: dict):
+    """Processes one GitHub repo containing notebook report templates and configuration info
+    indicating which servers the reports should be applied to, what Jupyter theme to use, and
+    where to store the final reports.
+    'git_info' is a dictionary with at least a 'git_spec' key that gives the address that 
+    should be given to 'git clone' to clone the repo.  A second, optional, key is 'branch'
+    which gives the repo branch to use.  If that key is not present, the 'master' branch
+    is used.
+    """
+    try:
+        # make a temporary directory to clone the repo into.
+        repo_dir = tempfile.TemporaryDirectory(prefix=f'repo_')
+        repo_path = Path(repo_dir.name)
+
+        # clone the repo into this directory.
+        git_spec = git_info['git_spec']
+        git_branch = git_info.get('branch', 'master')   # default to master branch.
+        subprocess.run(f'git clone -b {git_branch} --depth 1 {git_spec} {repo_dir.name}', shell=True, check=True)
+
+        # read the contents of the YAML configuration file in the root of the repo.
+        config = yaml.load(open(repo_path / 'config.yaml'), Loader=yaml.SafeLoader)
+
+        # execute the Jupyter theme command found in the config file. This will format the
+        # notebooks as desired by the user.
+        subprocess.run(config['jup_theme_cmd'], shell=True, check=True)
+
+        # get the output directory or S3 bucket/key from the config file.
+        output_dir = config['output_dir']
+
+        # make a Path object pointing to the template directory in the repo
+        template_path = repo_path / 'templates'
+
+        # loop through the BMON servers that are targeted by this repo and process
+        for server_url in config['bmon_urls']:
+            process_server(server_url, template_path, output_dir) 
+
+    except:
+        logging.exception(f'Error processing Git repo {git_info}')
+
+    finally:
+        # remove the temporary directory
+        repo_dir.cleanup()
+
 def process_server(server_url: str, template_path: Path, output_dir: str):
     """Create the reports for one BMON server with the base URL of 'server_url'.
     'template_path' is the Path to the Jupyter templates
     Copy the reports to the directory specified by 'output_dir', placed in a
     subdirectory named after the server_url.
     """
-    # extract server domain for message labeling purposes
-    server_domain = urlparse(server_url).netloc
 
     try:
+        # extract server domain for message labeling purposes
+        server_domain = server_url  # in case next statement errors, we have something to log
+        server_domain = urlparse(server_url).netloc
+
         logging.info(f'Processing started for {server_domain}')
 
         # Make a working directory and a reports directory for this server
