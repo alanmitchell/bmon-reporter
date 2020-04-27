@@ -17,5 +17,5 @@ log_file_dir: s3://bmonreporter/logs
 log_level:  INFO
 
 # The number of cores available for processing this script.  Allocating more cores
-# will increase processing speed.
+# will increase processing speed if there are multiple Git repositories being run.
 cores: 2

@@ -16,7 +16,6 @@ import pickle
 import json
 import yaml
 
-import boto3
 import papermill as pm       # installed with: pip install papermill[s3], to include S3 IO features.
 import scrapbook as sb       # install with: pip install nteract-scrapbook[s3], just in case S3 features used.
 import bmondata
