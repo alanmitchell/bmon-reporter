@@ -1,4 +1,4 @@
 # Version for the bmon-reporter package
-__version__ = "0.0.13"
+__version__ = "1.0.0"
 
 from . import reporter
