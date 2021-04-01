@@ -1,6 +1,7 @@
 """Utilities to facilitate copying files and directories where one of the directories
 could possibly be an S3 bucket.
 This module requires that the AWS CLI is installed because "aws s3 sync" is used.
+It uses AWS credentials from the "bmonreporter" profile in the AWS credentials files.
 """
 import shutil
 from pathlib import Path
@@ -23,9 +24,9 @@ def copy_dir_tree(from_dir, to_dir, content_type=None):
         # use the AWS CLI S3 sync command.  Delete any destination files that
         # do not exist in the source.
         if content_type:
-            subprocess.run(['aws', 's3', 'sync', from_dir, to_dir, '--delete', '--content-type', content_type])
+            subprocess.run(['aws', 's3', 'sync', from_dir, to_dir, '--delete', '--content-type', content_type, '--profile', 'bmonreporter'])
         else:
-            subprocess.run(['aws', 's3', 'sync', from_dir, to_dir, '--delete'])
+            subprocess.run(['aws', 's3', 'sync', from_dir, to_dir, '--delete',  '--profile', 'bmonreporter'])
     else:
         if Path(to_dir).exists():
             shutil.rmtree(to_dir)
