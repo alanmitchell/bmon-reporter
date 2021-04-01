@@ -30,8 +30,8 @@ setuptools.setup(
     install_requires=[
         'pyyaml>=5.1.1',
         'awscli>=1.16.264',
-        'papermill<2',
-        'nteract-scrapbook<1.0',
+        'papermill<3',
+        'nteract-scrapbook',
         'jupyterthemes>=0.20.0',
     ]
 )
