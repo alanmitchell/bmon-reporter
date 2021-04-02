@@ -284,7 +284,7 @@ def run_report_set(
                     continue
 
                 # convert the notebook to html. throw an error if one occurs.
-                subprocess.run(f'jupyter nbconvert {out_nb_path} --no-input', shell=True, check=True)
+                subprocess.run(f'jupyter nbconvert {out_nb_path} --no-input --to html', shell=True, check=True)
 
                 # move the resulting html report to the report directory
                 # first create the destination file name and create the necessary

@@ -31,7 +31,7 @@ setuptools.setup(
         'pyyaml>=5.1.1',
         'awscli>=1.16.264',
         'papermill<3',
-        'nteract-scrapbook',
+        'scrapbook<1',
         'jupyterthemes>=0.20.0',
     ]
 )
